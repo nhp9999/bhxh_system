@@ -69,10 +69,11 @@ const BatchForm = () => {
                 // Set giá trị mặc định cho form
                 form.setFieldsValue({
                     object_type: selectedObjectType,
-                    service_type: 'BHYT', // Mặc định là BHYT
+                    service_type: 'BHYT',
                     month: currentMonth,
                     year: currentYear,
-                    batch_number: nextBatchNumber
+                    batch_number: nextBatchNumber,
+                    support_amount: 0
                 });
             } catch (error) {
                 console.error('Error initializing form:', error);
@@ -119,10 +120,9 @@ const BatchForm = () => {
             setLoading(true);
             let currentBatchNumber = values.batch_number;
             let success = false;
-            let maxRetries = 10; // Giới hạn số lần thử để tránh vòng lặp vô hạn
+            let maxRetries = 10;
             let retryCount = 0;
 
-            // Kiểm tra thông tin user
             if (!user || !user.department_code) {
                 message.error('Không tìm thấy thông tin phòng ban của người dùng');
                 return;
@@ -130,45 +130,54 @@ const BatchForm = () => {
 
             while (!success && retryCount < maxRetries) {
                 try {
-                    // Tạo tên đợt dựa trên số đợt hiện tại
                     const batchName = `Đợt ${currentBatchNumber} tháng ${values.month}/${values.year}`;
-                    
-                    const response = await api.post('/declarations/employee/batch', {
-                        ...values,
-                        batch_number: currentBatchNumber, // Cập nhật số đợt
+
+                    // Chuyển đổi support_amount sang kiểu số
+                    const supportAmount = typeof values.support_amount === 'string' 
+                        ? parseFloat(values.support_amount.replace(/,/g, '')) 
+                        : Number(values.support_amount) || 0;
+
+                    // Log để kiểm tra giá trị
+                    console.log('Original support_amount:', values.support_amount);
+                    console.log('Converted support_amount:', supportAmount);
+
+                    // Tạo payload để gửi lên server
+                    const payload = {
+                        object_type: values.object_type,
+                        service_type: values.service_type,
+                        month: values.month,
+                        year: values.year,
+                        batch_number: currentBatchNumber,
                         name: batchName,
-                        department_code: user.department_code
-                    });
+                        department_code: user.department_code,
+                        support_amount: supportAmount,
+                        notes: values.notes || ''
+                    };
+
+                    // Log payload trước khi gửi
+                    console.log('Payload being sent to server:', payload);
+
+                    const response = await api.post('/declarations/employee/batch', payload);
 
                     if (response.data.success) {
+                        console.log('Server response:', response.data);
                         message.success('Tạo đợt kê khai thành công');
                         navigate(`/employee/declarations/${response.data.data.id}/create`);
                         success = true;
                     }
                 } catch (error) {
+                    console.error('API Error:', error.response?.data);
                     if (error.response?.data?.error?.includes('declaration_batch_month_year_batch_number_department_code_o_key')) {
-                        // Nếu trùng, tăng số đợt lên 1 và thử lại
                         currentBatchNumber++;
                         retryCount++;
-                        console.log(`Thử lại với số đợt ${currentBatchNumber}`);
                     } else {
-                        // Nếu lỗi khác thì throw để xử lý bên ngoài
                         throw error;
                     }
                 }
             }
-
-            if (!success) {
-                message.error('Không thể tạo đợt kê khai sau nhiều lần thử. Vui lòng thử lại sau.');
-            }
         } catch (error) {
             console.error('Create batch error:', error);
-            if (error.response?.status === 401) {
-                message.error('Phiên làm việc đã hết hạn, vui lòng đăng nhập lại');
-            } else {
-                const errorMessage = error.response?.data?.message || 'Có lỗi xảy ra khi tạo đợt kê khai';
-                message.error(errorMessage);
-            }
+            message.error(error.response?.data?.message || 'Có lỗi xảy ra khi tạo đợt kê khai');
         } finally {
             setLoading(false);
         }
@@ -245,11 +254,47 @@ const BatchForm = () => {
                 <Form.Item
                     name="batch_number"
                     label="Số đợt"
-                    tooltip="Số đợt được tự động tạo theo thứ tự tăng dần cho từng loại đối tượng"
+                    tooltip="Số đợt được tự động tạo theo th tự tăng dần cho từng loại đối tượng"
                 >
                     <InputNumber
                         style={{ width: '100%' }}
                         disabled
+                    />
+                </Form.Item>
+
+                <Form.Item
+                    name="support_amount"
+                    label="Số tiền hỗ trợ mỗi người"
+                    tooltip="Số tiền hỗ trợ cho mỗi người trong đợt kê khai"
+                    initialValue={0}
+                    rules={[
+                        {
+                            required: true,
+                            type: 'number',
+                            min: 0,
+                            message: 'Vui lòng nhập số tiền hợp lệ',
+                            transform: (value) => {
+                                if (value === '' || value === null) return 0;
+                                // Chuyển đổi string sang number và loại bỏ dấu phẩy
+                                const numericValue = typeof value === 'string' 
+                                    ? Number(value.replace(/,/g, ''))
+                                    : Number(value);
+                                return isNaN(numericValue) ? 0 : numericValue;
+                            }
+                        }
+                    ]}
+                >
+                    <InputNumber
+                        style={{ width: '100%' }}
+                        formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                        parser={value => value.replace(/\$\s?|(,*)/g, '')}
+                        placeholder="Nhập số tiền hỗ trợ"
+                        addonAfter="VNĐ"
+                        min={0}
+                        max={999999999999999} // Giới hạn số tiền tối đa
+                        precision={0} // Không cho phép số thập phân
+                        step={1000}
+                        defaultValue={0}
                     />
                 </Form.Item>
 

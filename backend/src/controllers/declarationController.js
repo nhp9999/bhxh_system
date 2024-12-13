@@ -138,13 +138,20 @@ const createEmployeeBatch = async (req, res) => {
             `INSERT INTO declaration_batch (
                 name, month, year, batch_number, department_code,
                 object_type, service_type, status, total_declarations,
-                created_by, created_at, updated_at, payment_status
+                created_by, created_at, updated_at, payment_status,
+                support_amount
             ) VALUES (
                 $1, $2, $3, $4, $5, 
                 $6, $7, 'pending', 0,
-                $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'unpaid'::text
+                $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'unpaid'::text,
+                $9::numeric
             ) RETURNING *`,
-            [name, month, year, batch_number, department_code, object_type, service_type, userId]
+            [name, month, year, batch_number, department_code, object_type, service_type, userId, 
+            // Đảm bảo support_amount là số và không phải undefined/null
+            (typeof req.body.support_amount === 'string' 
+                ? parseFloat(req.body.support_amount.replace(/,/g, '')) 
+                : Number(req.body.support_amount)) || 0
+            ]
         );
 
         await client.query('COMMIT');
@@ -440,7 +447,7 @@ const createDeclaration = async (req, res) => {
                 throw new Error(`CCCD ${cccd} đã được kê khai cho người tham gia ${existingCCCD.rows[0].full_name} trong đợt này`);
             }
 
-            // Nếu mã BHXH thay đổi, tạạạạạạạạạạạạo bản ghi mới
+            // Nếu mã BHXH thay đổi, tạạạạạạạạạạạạạo bản ghi mới
             if (isBHXHChanged) {
                 result = await client.query(
                     `INSERT INTO declarations (
@@ -821,7 +828,7 @@ const submitBatch = async (req, res) => {
         if (batch.status !== 'pending') {
             return res.status(400).json({ 
                 success: false,
-                message: 'ợt kê khai không ở trạng thái chờ gửi' 
+                message: 'ợt kê khai không ở trạng thái ch��� gửi' 
             });
         }
 
