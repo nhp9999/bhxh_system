@@ -35,63 +35,128 @@ const COMMUNES = [
     'Xã Vĩnh Trung'
 ].sort(); // Sắp xếp theo alphabet
 
-// Mapping xã phường v khóm/ấp tương ứng
+// Mapping xã phường và khóm/ấp tương ứng
 const HAMLET_MAPPING = {
-    'Phường Nhà Bàng': [
-        'Khóm 1', 'Khóm 2', 'Khóm 3', 'Khóm 4', 'Khóm 5', 'Khóm 6', 'Khóm 7', 'Khóm 8',
-        'Khóm Xuân Hòa', 'Khóm Xuân Khánh'
+    'An Hảo': [
+        'An Hảo',
+        'An Hòa', 
+        'An Thạnh',
+        'Hảo Thạnh',
+        'Thạnh Hòa',
+        'Thạnh Phú',
+        'Thạnh Tây'
     ],
-    'Phường Tịnh Biên': [
-        'Khóm 1', 'Khóm 2', 'Khóm 3', 'Khóm 4', 'Khóm 5', 'Khóm 6', 'Khóm 7', 'Khóm 8',
-        'Khóm Đông An', 'Khóm Thạnh Mỹ'
+    'An Phú': [
+        'An Hưng',
+        'An Thạnh',
+        'Phú Thạnh', 
+        'Thạnh An',
+        'Thạnh Hòa',
+        'Thạnh Phú',
+        'Thạnh Tây'
     ],
-    'Xã An Cư': [
-        'Ấp An Bình', 'Ấp An Hòa', 'Ấp An Thạnh A', 'Ấp An Thạnh B', 'Ấp Phước Hng',
-        'Ấp Thạnh Phú', 'Ấp Thạnh Hòa'
+    'An Nông': [
+        'An Hòa',
+        'An Thạnh',
+        'Bình Thạnh',
+        'Thạnh Hòa',
+        'Thạnh Phú',
+        'Thạnh Tây',
+        'Thới Sơn'
     ],
-    'Xã An Hảo': [
-        'Ấp An Hảo', 'Ấp An Hòa', 'Ấp An Thạnh', 'Ấp Hảo Thạnh', 'Ấp Thạnh Hòa',
-        'Ấp Thnh Ph��', 'p Thạnh Tây'
+    'Chi Lăng': [
+        'Chi Lăng',
+        'Phước Thạnh',
+        'Thạnh Hòa',
+        'Thạnh Phú',
+        'Thạnh Tây',
+        'Thới Sơn',
+        'Vĩnh Thạnh'
     ],
-    'Xã An Nông': [
-        'Ấp An Hòa', 'Ấp An Thạnh', 'Ấp Bình Thạnh', 'Ấp Thạnh Hòa', 'Ấp Thạnh Phú',
-        'Ấp Thạnh Tây', 'Ấp Thới Sơn'
+    'Nhơn Hưng': [
+        'Hưng Thạnh 1',
+        'Hưng Thạnh 2',
+        'Nhơn Hòa 1',
+        'Nhơn Hòa 2',
+        'Thạnh Hưng',
+        'Thạnh Phú',
+        'Thạnh Tây'
     ],
-    'Xã An Phú': [
-        'Ấp An Hưng', 'Ấp An Thạnh', 'Ấp Phú Thạnh', 'Ấp Thạnh An', 'Ấp Thạnh Hòa',
-        'Ấp Thạnh Phú', 'Ấp Thạnh Tây'
+    'Núi Voi': [
+        'Núi Két',
+        'Núi Voi',
+        'Thạnh Đức',
+        'Voi Lớn',
+        'Thạnh Hòa',
+        'Thạnh Phú',
+        'Thạnh Tây'
     ],
-    'Xã Chi Lăng': [
-        'Ấp Chi Lăng', 'Ấp Phước Thạnh', 'Ấp Thạnh Hòa', 'Ấp Thạnh Phú', 'Ấp Thạnh Tây',
-        'Ấp Thới Sơn', 'Ấp Vĩnh Thạnh'
+    'Tân Lập': [
+        'Tân An',
+        'Tân Hòa',
+        'Tân Thạnh',
+        'Thạnh Tân',
+        'Thạnh Hòa',
+        'Thạnh Phú',
+        'Thạnh Tây'
     ],
-    'Xã Nhơn Hưng': [
-        'Ấp Hưng Thạnh 1', 'Ấp Hưng Thạnh 2', 'Ấp Nhơn Hòa 1', 'Ấp Nhơn Hòa 2', 
-        'Ấp Thạnh Hưng', 'p Thạnh Ph', 'Ấp Thạnh Tây'
+    'Tân Lợi': [
+        'Tân Hòa',
+        'Tân Phú',
+        'Tân Thạnh',
+        'Thạnh Lợi',
+        'Thạnh Hà',
+        'Thạnh Phú',
+        'Thạnh Tây'
     ],
-    'Xã Núi Voi': [
-        'Ấp Núi Két', 'p Núi Voi', 'Ấp Thạnh Đức', 'Ấp Voi Lớn', 'Ấp Thạnh Hòa',
-        'Ấp Thạnh Phú', 'Ấp Thạnh Tây'
+    'Thới Sơn': [
+        'Thới Hòa',
+        'Thới Thuận',
+        'Thới Thạnh A',
+        'Thới Thạnh B',
+        'Thạnh Hòa',
+        'Thạnh Phú',
+        'Thạnh Tây'
     ],
-    'Xã Tân Lập': [
-        'Ấp Tân An', 'Ấp Tân Hòa', 'Ấp Tân Thạnh', 'Ấp Thạnh Tân', 'Ấp Thạnh Hòa',
-        'Ấp Thạnh Phú', 'Ấp Thnh Tây'
+    'Văn Giáo': [
+        'Phước Thạnh',
+        'Thạnh Hòa',
+        'Văn Giáo A',
+        'Văn Giáo B',
+        'Thạnh Phú',
+        'Thạnh Tây',
+        'Vĩnh Thạnh'
     ],
-    'Xã Tân Lợi': [
-        'Ấp Tân Hòa', 'Ấp Tn Phú', 'Ấp Tân Thạnh', 'Ấp Thnh Lợi', 'Ấp Thạnh Ha',
-        'Ấp Thạnh Phú', 'Ấp Thạnh Tây'
+    'Vĩnh Trung': [
+        'Trung An',
+        'Trung Hòa',
+        'Vĩnh Hòa',
+        'Vĩnh Thạnh',
+        'Thạnh Hòa',
+        'Thạnh Phú',
+        'Thạnh Tây'
     ],
-    'Xã Thới Sơn': [
-        'Ấp Thới Hòa', 'Ấp Thới Thuận', 'Ấp Thới Thạnh A', 'Ấp Thới Thạnh B',
-        'Ấp Thạnh Hòa', 'Ấp Thạnh Phú', 'Ấp Thạnh Tây'
+    'Nhà Bàng': [
+        'Khóm 1',
+        'Khóm 2',
+        'Khóm 3',
+        'Khóm 4',
+        'Khóm 5',
+        'Khóm 6',
+        'Khóm Xuân Hòa',
+        'Khóm Xuân Khánh'
     ],
-    'Xã Văn Giáo': [
-        'Ấp Phước Thạnh', 'Ấp Thạnh Hòa', 'Ấp Văn Giáo A', 'Ấp Văn Giáo B',
-        'Ấp Thạnh Phú', 'Ấp Thạnh Tây', 'Ấp Vĩnh Thạnh'
-    ],
-    'Xã Vĩnh Trung': [
-        'p Trung An', 'Ấp Trung Hòa', 'Ấp Vĩnh Hòa', 'Ấp Vĩnh Thạnh',
-        'Ấp Thạnh Hòa', 'Ấp Thạnh Phú', 'Ấp Thạnh Tây'
+    'Tịnh Biên': [
+        'Khóm 1',
+        'Khóm 2',
+        'Khóm 3',
+        'Khóm 4',
+        'Khóm 5',
+        'Khóm 6',
+        'Khóm 7',
+        'Khóm 8',
+        'Khóm Đông An',
+        'Khóm Thạnh Mỹ'
     ]
 };
 
@@ -114,7 +179,7 @@ const HOSPITALS = [
     'Trung tâm Y t huyện Phú Tân',
     'Trung tâm Y tế huyện Tịnh Biên',
     'Trung tâm Y tế huyện Tri Tôn',
-    'Trung tâm Y tế huyện Châu Phú',
+    'Trung tâm Y t�� huyện Châu Phú',
     'Trung tâm Y tế huyện Chợ Mới',
     'Trung tâm Y tế huyện Châu Thành',
     'Trung tâm Y tế huyện Thoại Sơn',
@@ -474,8 +539,9 @@ const DeclarationForm = () => {
     };
 
     // Xử lý khi click vào dòng trong bảng
-    const handleRowClick = (record) => {
+    const handleRowClick = async (record) => {
         setSelectedDeclaration(record);
+        const userResponse = await api.get('/auth/me');
         const formData = {
             ...record,
             birth_date: record.birth_date ? dayjs(record.birth_date) : undefined,
@@ -484,9 +550,14 @@ const DeclarationForm = () => {
             new_card_effective_date: record.new_card_effective_date ? dayjs(record.new_card_effective_date) : undefined,
             originalBhxhCode: record.bhxh_code,
             originalCccd: record.cccd,
-            isEdit: true
+            isEdit: true,
+            province: userResponse.data?.province,
+            district: userResponse.data?.district,
+            commune: userResponse.data?.commune,
+            hamlet: record.hamlet
         };
         form.setFieldsValue(formData);
+        setHamlets(HAMLET_MAPPING[userResponse.data?.commune] || []);
     };
 
     // Xử lý xóa kê khai
@@ -908,7 +979,7 @@ const DeclarationForm = () => {
         setTotalAmount(total);
     }, [declarations, calculateTotalAmount]);
 
-    // Xử lý khi thay đổi số tiền h��� trợ
+    // Xử lý khi thay đổi số tiền hỗ trợ
     const handleSupportAmountChange = (value) => {
         const numValue = Number(value) || 0;
         setSupportAmountPerDeclaration(numValue);
@@ -1133,6 +1204,13 @@ const DeclarationForm = () => {
             });
         }
     };
+
+    // Thêm useEffect để khởi tạo danh sách khóm/ấp ban đầu
+    useEffect(() => {
+        if (userInfo?.commune) {
+            setHamlets(HAMLET_MAPPING[userInfo.commune] || []);
+        }
+    }, [userInfo]);
 
     return (
         <div className="container mx-auto py-2">
@@ -1441,10 +1519,18 @@ const DeclarationForm = () => {
                                             rules={[{ required: true, message: 'Vui lòng chọn xã/phường' }]}
                                             initialValue={userInfo?.commune}
                                         >
-                                            <Input 
-                                                disabled 
-                                                className="h-9 bg-gray-50"
-                                            />
+                                            <Select
+                                                disabled={true}
+                                                className="h-9"
+                                                onChange={handleCommuneChange}
+                                                value={userInfo?.commune}
+                                            >
+                                                {COMMUNES.map(commune => (
+                                                    <Option key={commune} value={commune}>
+                                                        {commune}
+                                                    </Option>
+                                                ))}
+                                            </Select>
                                         </Form.Item>
                                     </Col>
                                     <Col span={6}>
@@ -1456,6 +1542,10 @@ const DeclarationForm = () => {
                                             <Select 
                                                 placeholder="Chọn khóm/ấp"
                                                 className="h-9"
+                                                showSearch
+                                                filterOption={(input, option) =>
+                                                    option.children.toLowerCase().indexOf(input.toLowerCase()) >= 0
+                                                }
                                             >
                                                 {hamlets.map(hamlet => (
                                                     <Option key={hamlet} value={hamlet}>
@@ -1491,7 +1581,7 @@ const DeclarationForm = () => {
                             <div className="flex justify-between items-center">
                                 <div>
                                     <h3 className="text-base font-medium text-gray-800">
-                                        Danh sách kê khai trong đợt
+                                        Danh sách k�� khai trong đợt
                                     </h3>
                                     <span className="text-sm text-gray-500">
                                         {declarations?.length || 0} bản ghi

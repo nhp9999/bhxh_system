@@ -49,13 +49,13 @@ const LoginForm = () => {
             // Sử dụng login từ AuthContext
             await login(response.data.token, response.data.user);
 
-            // Chuyển hướng dựa vào role
+            // Sửa lại phần chuyển hướng
             if (response.data.user.role === 'admin') {
                 console.log('Chuyển hướng admin đến: /admin/dashboard');
                 navigate('/admin/dashboard', { replace: true });
             } else {
-                console.log('Chuyển hướng nhân viên đến: /employee/declarations');
-                navigate('/employee/declarations', { replace: true });
+                console.log('Chuyển hướng nhân viên đến: /employee/dashboard');
+                navigate('/employee/dashboard', { replace: true });
             }
 
         } catch (err) {

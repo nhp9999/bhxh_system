@@ -7,6 +7,7 @@ import AdminLayout from './components/Admin/AdminLayout';
 import EmployeeLayout from './components/Employee/EmployeeLayout';
 import { adminRoutes } from './routes/admin';
 import { employeeRoutes } from './routes/employee';
+import EmployeeDashboard from './components/Employee/EmployeeDashboard';
 
 const App = () => {
     return (
@@ -15,25 +16,6 @@ const App = () => {
                 {/* Public routes */}
                 <Route path="/login" element={<LoginForm />} />
                 <Route path="/unauthorized" element={<UnauthorizedPage />} />
-
-                {/* Admin routes */}
-                <Route 
-                    path="/admin/*" 
-                    element={
-                        <PrivateRoute roles={['admin']}>
-                            <AdminLayout />
-                        </PrivateRoute>
-                    }
-                >
-                    <Route index element={<Navigate to="dashboard" replace />} />
-                    {adminRoutes.map((route) => (
-                        <Route
-                            key={route.path}
-                            path={route.path}
-                            element={route.element}
-                        />
-                    ))}
-                </Route>
 
                 {/* Employee routes */}
                 <Route 
@@ -44,7 +26,8 @@ const App = () => {
                         </PrivateRoute>
                     }
                 >
-                    <Route index element={<Navigate to="declarations" replace />} />
+                    <Route index element={<Navigate to="dashboard" replace />} />
+                    <Route path="dashboard" element={<EmployeeDashboard />} />
                     {employeeRoutes.map((route) => (
                         <Route
                             key={route.path}
@@ -57,9 +40,8 @@ const App = () => {
                 {/* Default redirect */}
                 <Route
                     path="/"
-                    element={<Navigate to="/login" replace />}
+                    element={<Navigate to="/employee/dashboard" replace />}
                 />
-                <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
         </AuthProvider>
     );
