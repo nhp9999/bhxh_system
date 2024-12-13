@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import PrivateRoute from './components/Auth/PrivateRoute';
 import LoginForm from './components/Auth/LoginForm';
 import UnauthorizedPage from './components/Common/UnauthorizedPage';
@@ -16,6 +16,25 @@ const App = () => {
                 {/* Public routes */}
                 <Route path="/login" element={<LoginForm />} />
                 <Route path="/unauthorized" element={<UnauthorizedPage />} />
+
+                {/* Admin routes */}
+                <Route 
+                    path="/admin/*" 
+                    element={
+                        <PrivateRoute roles={['admin']}>
+                            <AdminLayout />
+                        </PrivateRoute>
+                    }
+                >
+                    <Route index element={<Navigate to="dashboard" replace />} />
+                    {adminRoutes.map((route) => (
+                        <Route
+                            key={route.path}
+                            path={route.path}
+                            element={route.element}
+                        />
+                    ))}
+                </Route>
 
                 {/* Employee routes */}
                 <Route 
@@ -40,10 +59,25 @@ const App = () => {
                 {/* Default redirect */}
                 <Route
                     path="/"
-                    element={<Navigate to="/employee/dashboard" replace />}
+                    element={
+                        <PrivateRoute>
+                            <DefaultRedirect />
+                        </PrivateRoute>
+                    }
                 />
             </Routes>
         </AuthProvider>
+    );
+};
+
+// Component xử lý redirect mặc định
+const DefaultRedirect = () => {
+    const { user } = useAuth();
+    return (
+        <Navigate 
+            to={user?.role === 'admin' ? '/admin/dashboard' : '/employee/dashboard'} 
+            replace 
+        />
     );
 };
 

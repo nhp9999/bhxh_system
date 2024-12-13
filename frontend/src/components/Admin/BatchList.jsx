@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Card, Tag, message, Space, Typography, Button, Modal, Input, Tooltip } from 'antd';
-import { EyeOutlined, CheckOutlined, CloseOutlined, FormOutlined, CheckCircleOutlined, DownloadOutlined } from '@ant-design/icons';
+import { Table, Card, Tag, message, Space, Typography, Button, Modal, Input, Tooltip, Image } from 'antd';
+import { EyeOutlined, CheckOutlined, CloseOutlined, FormOutlined, CheckCircleOutlined, DownloadOutlined, FileTextOutlined, FileImageOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api';
 
@@ -12,6 +12,11 @@ const BatchList = () => {
     const [rejectModalVisible, setRejectModalVisible] = useState(false);
     const [rejectNotes, setRejectNotes] = useState('');
     const [selectedBatch, setSelectedBatch] = useState(null);
+    const [fileCodeModalVisible, setFileCodeModalVisible] = useState(false);
+    const [fileCode, setFileCode] = useState('');
+    const [submittingFileCode, setSubmittingFileCode] = useState(false);
+    const [editingBatch, setEditingBatch] = useState(null);
+    const [viewingBillImage, setViewingBillImage] = useState(null);
     const navigate = useNavigate();
 
     const fetchBatches = async () => {
@@ -163,7 +168,7 @@ const BatchList = () => {
         try {
             const response = await api.post(`/declarations/admin/batch/${record.id}/complete`);
             if (response.data.success) {
-                message.success('��ã hoàn thành xử lý hồ sơ');
+                message.success('Đã hoàn thành xử lý hồ sơ');
                 fetchBatches();
             }
         } catch (error) {
@@ -194,12 +199,49 @@ const BatchList = () => {
         }
     };
 
+    const showFileCodeModal = (batch) => {
+        setSelectedBatch(batch);
+        setFileCode('');
+        setFileCodeModalVisible(true);
+    };
+
+    const handleSubmitFileCode = async () => {
+        if (!fileCode.trim()) {
+            message.error('Vui lòng nhập mã hồ sơ');
+            return;
+        }
+
+        try {
+            setSubmittingFileCode(true);
+            await api.post(`/declarations/admin/batch/${selectedBatch.id}/file-code`, {
+                file_code: fileCode.trim()
+            });
+            message.success('Cập nhật mã hồ sơ thành công');
+            setFileCodeModalVisible(false);
+            setSelectedBatch(null);
+            setFileCode('');
+            fetchBatches();
+        } catch (error) {
+            console.error('Error submitting file code:', error);
+            message.error('Không thể cập nhật mã hồ sơ');
+        } finally {
+            setSubmittingFileCode(false);
+        }
+    };
+
     const columns = [
         {
             title: 'Mã kê khai',
             key: 'id',
             render: (_, record) => `#${record.id}`,
             width: 100
+        },
+        {
+            title: 'Mã hồ sơ',
+            dataIndex: 'file_code',
+            key: 'file_code',
+            width: 150,
+            render: (code) => code || '-'
         },
         {
             title: 'Nhân viên',
@@ -266,6 +308,23 @@ const BatchList = () => {
             render: (date) => new Date(date).toLocaleDateString('vi-VN')
         },
         {
+            title: 'Ảnh bill',
+            key: 'bill_image',
+            render: (_, record) => (
+                record.bill_image ? (
+                    <Button
+                        type="link"
+                        icon={<FileImageOutlined />}
+                        onClick={() => setViewingBillImage(record)}
+                    >
+                        Xem ảnh
+                    </Button>
+                ) : (
+                    <Tag color="red">Chưa có ảnh</Tag>
+                )
+            )
+        },
+        {
             title: 'Thao tác',
             key: 'action',
             align: 'center',
@@ -278,6 +337,17 @@ const BatchList = () => {
                             onClick={() => handleViewDetails(record.id)}
                         />
                     </Tooltip>
+
+                    {record.status === 'approved' && record.payment_status === 'paid' && !record.file_code && (
+                        <Tooltip title="Nhập mã hồ sơ">
+                            <Button
+                                type="text"
+                                icon={<FileTextOutlined />}
+                                onClick={() => showFileCodeModal(record)}
+                                className="text-blue-600 hover:text-blue-700"
+                            />
+                        </Tooltip>
+                    )}
 
                     {record.status === 'approved' && record.payment_status === 'paid' && (
                         <Tooltip title="Xử lý hồ sơ">
@@ -371,6 +441,83 @@ const BatchList = () => {
                     onChange={(e) => setRejectNotes(e.target.value)}
                     placeholder="Nhập lý do từ chối..."
                 />
+            </Modal>
+
+            <Modal
+                title="Nhập mã hồ sơ"
+                open={fileCodeModalVisible}
+                onOk={handleSubmitFileCode}
+                onCancel={() => {
+                    setFileCodeModalVisible(false);
+                    setFileCode('');
+                    setSelectedBatch(null);
+                }}
+                okText="Lưu"
+                cancelText="Hủy"
+                confirmLoading={submittingFileCode}
+            >
+                <div className="space-y-4">
+                    <div>
+                        <div className="mb-2">Thông tin đợt kê khai:</div>
+                        {selectedBatch && (
+                            <div className="bg-gray-50 p-3 rounded">
+                                <p><strong>Tên đợt:</strong> {selectedBatch.name}</p>
+                                <p><strong>Nhân viên:</strong> {selectedBatch.employee_name}</p>
+                                <p><strong>Phòng ban:</strong> {selectedBatch.department_code}</p>
+                            </div>
+                        )}
+                    </div>
+                    <div>
+                        <div className="mb-2">Nhập mã hồ sơ:</div>
+                        <Input
+                            value={fileCode}
+                            onChange={(e) => setFileCode(e.target.value)}
+                            placeholder="Nhập mã hồ sơ..."
+                            maxLength={50}
+                        />
+                    </div>
+                </div>
+            </Modal>
+
+            <Modal
+                title="Ảnh bill thanh toán"
+                open={!!viewingBillImage}
+                onCancel={() => setViewingBillImage(null)}
+                footer={null}
+                width={800}
+            >
+                {viewingBillImage && (
+                    <div className="space-y-4">
+                        <div>
+                            <div className="text-gray-500 mb-2">Đợt kê khai:</div>
+                            <div className="font-medium">{viewingBillImage.name}</div>
+                        </div>
+                        <div>
+                            <div className="text-gray-500 mb-2">Số tiền:</div>
+                            <div className="font-medium text-blue-600">
+                                {new Intl.NumberFormat('vi-VN', {
+                                    style: 'currency',
+                                    currency: 'VND'
+                                }).format(viewingBillImage.payment_amount)}
+                            </div>
+                        </div>
+                        <div className="flex justify-center">
+                            <Image
+                                src={`${import.meta.env.VITE_API_URL}/uploads/bills/${viewingBillImage.bill_image}`}
+                                alt="Bill"
+                                style={{ maxHeight: '60vh' }}
+                                fallback="/images/image-error.png"
+                                onError={(e) => {
+                                    console.error('Image load error:', {
+                                        src: e.target.src,
+                                        error: e
+                                    });
+                                    message.error('Không thể tải ảnh bill');
+                                }}
+                            />
+                        </div>
+                    </div>
+                )}
             </Modal>
         </Card>
     );

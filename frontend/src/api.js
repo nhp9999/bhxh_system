@@ -17,9 +17,13 @@ api.interceptors.request.use(
         if (token) {
             config.headers.Authorization = `Bearer ${token}`;
         }
-        // Ensure proper encoding for request data
-        if (config.data && typeof config.data === 'object') {
+        // Chỉ stringify data nếu không phải FormData
+        if (config.data && typeof config.data === 'object' && !(config.data instanceof FormData)) {
             config.data = JSON.stringify(config.data);
+        }
+        // Nếu là FormData, đảm bảo Content-Type được set đúng
+        if (config.data instanceof FormData) {
+            config.headers['Content-Type'] = 'multipart/form-data';
         }
         return config;
     },

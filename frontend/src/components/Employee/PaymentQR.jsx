@@ -1,202 +1,264 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Modal, Spin, message, Button } from 'antd';
-import axios from 'axios';
+import React, { useState } from 'react';
+import { Modal, Button, Space, message, Upload, App } from 'antd';
+import { CopyOutlined, DownloadOutlined, CheckCircleOutlined, UploadOutlined } from '@ant-design/icons';
 import api from '../../api';
 
-// Cache object để lưu mã QR
-const qrCache = new Map();
+const PaymentQRContent = ({ visible, onClose, batch, userDepartmentCode }) => {
+    const [confirmLoading, setConfirmLoading] = useState(false);
+    const [showUploadModal, setShowUploadModal] = useState(false);
+    const [fileList, setFileList] = useState([]);
+    const [uploading, setUploading] = useState(false);
 
-const PaymentQR = ({ visible, onClose, batch, userDepartmentCode }) => {
-    const [loading, setLoading] = useState(false);
-    const [qrCode, setQrCode] = useState(null);
-    const [submitting, setSubmitting] = useState(false);
+    const handleCopy = (text, label) => {
+        navigator.clipboard.writeText(text);
+        message.success(`Đã sao chép ${label}`);
+    };
 
-    // Tạo key cho cache dựa trên thông tin batch
-    const cacheKey = useMemo(() => {
-        if (!batch) return null;
-        return `${batch.id}_${batch.total_amount}_${userDepartmentCode}`;
-    }, [batch, userDepartmentCode]);
-
-    // Tạo nội dung chuyển khoản
-    const transferContent = useMemo(() => {
-        if (!userDepartmentCode) return '';
-        return `bhxh 103 00 BI0113G53 08907 dong bhxh Cty TNHH Thuong Mai Dich Vu Huy Phuc ${userDepartmentCode}`;
-    }, [userDepartmentCode]);
-
-    // Xử lý số tiền
-    const formatAmount = useCallback((value) => {
-        if (!value) return '0';
-        const amount = Math.floor(Number(value)).toString();
-        return amount.length > 13 ? amount.slice(0, 13) : amount;
-    }, []);
-
-    // Hàm tạo QR code
-    const generateQR = useCallback(async () => {
-        if (!visible || !batch || !cacheKey) return;
-
-        // Kiểm tra cache
-        if (qrCache.has(cacheKey)) {
-            setQrCode(qrCache.get(cacheKey));
-            return;
-        }
-
-        setLoading(true);
-        try {
-            const clientId = import.meta.env.VITE_VIETQR_CLIENT_ID;
-            const apiKey = import.meta.env.VITE_VIETQR_API_KEY;
-
-            if (!clientId || !apiKey) {
-                throw new Error('Thiếu thông tin xác thực VietQR');
-            }
-
-            const amount = formatAmount(batch.total_amount);
-            if (amount === '0') {
-                throw new Error('Số tiền không hợp lệ');
-            }
-
-            const data = {
-                accountNo: '6706202903085', // STK Agribank
-                accountName: 'BAO HIEM XA HOI THI XA TINH BIEN', // Tên tài khoản
-                acqId: '970405', // Mã ngân hàng Agribank
-                amount: amount,
-                addInfo: transferContent,
-                format: 'text',
-                template: 'compact2'
-            };
-
-            const response = await axios({
-                method: 'post',
-                url: 'https://api.vietqr.io/v2/generate',
-                headers: {
-                    'x-client-id': clientId,
-                    'x-api-key': apiKey,
-                    'Content-Type': 'application/json'
-                },
-                data: data
-            });
-
-            if (response.data.code === '00' && response.data.data?.qrDataURL) {
-                const qrDataURL = response.data.data.qrDataURL;
-                // Lưu vào cache
-                qrCache.set(cacheKey, qrDataURL);
-                setQrCode(qrDataURL);
-            } else {
-                throw new Error(response.data.desc || 'Không thể tạo mã QR');
-            }
-        } catch (error) {
-            console.error('Error generating QR:', error);
-            let errorMessage = 'Có lỗi xảy ra khi tạo mã QR thanh toán';
-            
-            if (error.response) {
-                errorMessage = error.response.data?.desc || errorMessage;
-            } else if (error.message) {
-                errorMessage = error.message;
-            }
-            
-            message.error(errorMessage);
-            setQrCode(null);
-        } finally {
-            setLoading(false);
-        }
-    }, [visible, batch, cacheKey, transferContent, formatAmount]);
-
-    // Gọi API khi modal mở
-    useEffect(() => {
-        if (visible) {
-            generateQR();
-        }
-    }, [visible, generateQR]);
-
-    // Xóa QR code khi đóng modal
-    useEffect(() => {
-        if (!visible) {
-            setQrCode(null);
-        }
-    }, [visible]);
-
-    const formatCurrency = useCallback((value) => {
-        return new Intl.NumberFormat('vi-VN', {
-            style: 'currency',
-            currency: 'VND'
-        }).format(value);
-    }, []);
-
-    const handlePaymentConfirm = async () => {
-        try {
-            setSubmitting(true);
-            const response = await api.post(`/declarations/batch/${batch.id}/confirm-payment`);
-            if (response.data.success) {
-                message.success('Xác nhận thanh toán thành công');
-                onClose();
-                // Reload trang để cập nhật trạng thái
-                window.location.reload();
-            }
-        } catch (error) {
-            console.error('Error confirming payment:', error);
-            message.error(error.response?.data?.message || 'Có lỗi xảy ra khi xác nhận thanh toán');
-        } finally {
-            setSubmitting(false);
+    const handleDownloadQR = () => {
+        const qrImage = document.querySelector('#payment-qr img');
+        if (qrImage) {
+            const link = document.createElement('a');
+            link.href = qrImage.src;
+            link.download = `QR_${batch?.id || 'payment'}.png`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         }
     };
 
+    const handleConfirmPayment = () => {
+        // Hiện modal upload ảnh bill
+        setShowUploadModal(true);
+    };
+
+    const handleUpload = async () => {
+        if (!fileList || fileList.length === 0) {
+            message.error('Vui lòng chọn ảnh bill thanh toán');
+            return;
+        }
+
+        const file = fileList[0];
+        if (!file) {
+            message.error('Không tìm thấy file ảnh');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('bill_image', file.originFileObj || file);
+
+        setUploading(true);
+        try {
+            console.log('Uploading file:', {
+                fileName: file.name,
+                fileSize: file.size,
+                fileType: file.type
+            });
+
+            // Upload ảnh bill
+            const response = await api.post(`/declarations/employee/batch/${batch.id}/upload-bill`, formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data'
+                }
+            });
+
+            console.log('Upload response:', response);
+
+            // Xác nhận thanh toán
+            await api.post(`/declarations/employee/batch/${batch.id}/confirm-payment`);
+
+            message.success('Xác nhận thanh toán thành công');
+            setShowUploadModal(false);
+            setFileList([]);
+            onClose();
+        } catch (error) {
+            console.error('Error uploading bill:', error);
+            message.error(error.response?.data?.message || 'Không thể upload ảnh bill');
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    const uploadProps = {
+        onRemove: () => {
+            setFileList([]);
+        },
+        beforeUpload: (file) => {
+            // Kiểm tra định dạng file
+            const isImage = file.type.startsWith('image/');
+            if (!isImage) {
+                message.error('Chỉ chấp nhận file ảnh!');
+                return false;
+            }
+
+            // Kiểm tra kích thước file (tối đa 5MB)
+            const isLt5M = file.size / 1024 / 1024 < 5;
+            if (!isLt5M) {
+                message.error('Kích thước ảnh phải nhỏ hơn 5MB!');
+                return false;
+            }
+
+            // Thêm file vào fileList
+            setFileList([file]);
+            return false;
+        },
+        fileList,
+        maxCount: 1,
+        // Thêm accept để chỉ cho phép chọn file ảnh
+        accept: 'image/*'
+    };
+
     return (
-        <Modal
-            title="Thanh toán qua VietQR"
-            open={visible}
-            onCancel={onClose}
-            footer={[
-                <Button key="cancel" onClick={onClose}>
-                    Đóng
-                </Button>,
-                <Button
-                    key="confirm"
-                    type="primary"
-                    loading={submitting}
-                    onClick={handlePaymentConfirm}
-                >
-                    Đã thanh toán
-                </Button>
-            ]}
-            width={400}
-            destroyOnClose={true}
-        >
-            <div className="text-center">
-                {loading ? (
-                    <div className="py-8">
-                        <Spin size="large" tip="Đang tạo mã QR..." />
-                    </div>
-                ) : qrCode ? (
-                    <div className="space-y-4">
-                        <div className="text-sm font-medium mb-4">
-                            <div>NGÂN HÀNG: AGRIBANK</div>
-                            <div>STK: 6706202903085</div>
-                            <div>TÊN: BAO HIEM XA HOI THI XA TINH BIEN</div>
-                        </div>
-                        <img 
-                            src={qrCode} 
-                            alt="QR Code" 
-                            className="mx-auto"
-                            style={{ maxWidth: '300px' }}
-                            loading="eager"
+        <>
+            <Modal
+                title={<div className="text-lg">Mã QR Thanh toán</div>}
+                open={visible}
+                onCancel={onClose}
+                footer={null}
+                width={800}
+                centered
+            >
+                <div className="flex gap-8">
+                    {/* QR Code */}
+                    <div className="w-1/2 flex flex-col items-center justify-center p-4 bg-gray-50 rounded-lg" id="payment-qr">
+                        <img
+                            src={`https://api.vietqr.io/image/${batch?.bank_id || '970416'}-${batch?.account_number || '6706202903085'}-compact2.jpg?amount=${batch?.payment_amount || 0}&addInfo=${batch?.payment_content || ''}&accountName=BAO%20HIEM%20XA%20HOI%20THI%20XA%20TINH%20BIEN`}
+                            alt="Payment QR"
+                            className="w-full max-w-[300px]"
                         />
-                        <div className="text-sm text-gray-500">
-                            Quét mã QR bằng ứng dụng Mobile Banking để thanh toán
+                        <img src="/vietqr.png" alt="VietQR" className="mt-4 h-8" />
+                    </div>
+
+                    {/* Thông tin thanh toán */}
+                    <div className="w-1/2 space-y-4">
+                        <div>
+                            <div className="text-gray-500 mb-1">Tên đợt</div>
+                            <div className="font-medium">{batch?.name}</div>
                         </div>
-                        <div className="text-sm font-medium">
-                            Số tiền: {formatCurrency(batch?.total_amount || 0)}
+
+                        <div>
+                            <div className="text-gray-500 mb-1">Ngân hàng</div>
+                            <div className="font-medium">AGRIBANK</div>
                         </div>
-                        <div className="text-xs text-gray-500 mt-2">
-                            Nội dung chuyển khoản: {transferContent}
+
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <div className="text-gray-500 mb-1">Số tài khoản</div>
+                                <div className="font-medium">6706202903085</div>
+                            </div>
+                            <Button
+                                type="text"
+                                icon={<CopyOutlined />}
+                                onClick={() => handleCopy('6706202903085', 'số tài khoản')}
+                            >
+                                Sao chép
+                            </Button>
+                        </div>
+
+                        <div>
+                            <div className="text-gray-500 mb-1">Tên tài khoản</div>
+                            <div className="font-medium">BAO HIEM XA HOI THI XA TINH BIEN</div>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <div className="text-gray-500 mb-1">Số tiền</div>
+                                <div className="font-medium text-blue-600">
+                                    {new Intl.NumberFormat('vi-VN', {
+                                        style: 'currency',
+                                        currency: 'VND'
+                                    }).format(batch?.payment_amount || 0)}
+                                </div>
+                            </div>
+                            <Button
+                                type="text"
+                                icon={<CopyOutlined />}
+                                onClick={() => handleCopy(batch?.payment_amount || '', 'số tiền')}
+                            >
+                                Sao chép
+                            </Button>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <div className="text-gray-500 mb-1">Nội dung chuyển khoản</div>
+                                <div className="font-medium break-all">
+                                    {`bhxh ${userDepartmentCode} ${batch?.id} dong bhxh NV${batch?.employee_code || ''}`}
+                                </div>
+                            </div>
+                            <Button
+                                type="text"
+                                icon={<CopyOutlined />}
+                                onClick={() => handleCopy(
+                                    `bhxh ${userDepartmentCode} ${batch?.id} dong bhxh NV${batch?.employee_code || ''}`,
+                                    'nội dung chuyển khoản'
+                                )}
+                            >
+                                Sao chép
+                            </Button>
+                        </div>
+
+                        <div className="pt-4 flex justify-between">
+                            <Button
+                                icon={<DownloadOutlined />}
+                                onClick={handleDownloadQR}
+                            >
+                                Tải mã QR
+                            </Button>
+                            <Button
+                                type="primary"
+                                icon={<CheckCircleOutlined />}
+                                onClick={handleConfirmPayment}
+                                loading={confirmLoading}
+                            >
+                                Xác nhận đã thanh toán
+                            </Button>
                         </div>
                     </div>
-                ) : (
-                    <div className="text-red-500">
-                        Không thể tạo mã QR. Vui lòng thử lại sau.
+                </div>
+
+                <div className="mt-4 text-gray-500 text-sm">
+                    Sử dụng ứng dụng ngân hàng để quét mã QR và thanh toán
+                </div>
+            </Modal>
+
+            {/* Modal upload ảnh bill */}
+            <Modal
+                title="Upload ảnh bill thanh toán"
+                open={showUploadModal}
+                onOk={handleUpload}
+                onCancel={() => {
+                    setShowUploadModal(false);
+                    setFileList([]);
+                }}
+                okText="Xác nhận"
+                cancelText="Hủy"
+                confirmLoading={uploading}
+            >
+                <div className="space-y-4">
+                    <div className="text-gray-500 mb-2">
+                        Vui lòng upload ảnh bill thanh toán để xác nhận:
                     </div>
-                )}
-            </div>
-        </Modal>
+                    <Upload.Dragger {...uploadProps}>
+                        <p className="ant-upload-drag-icon">
+                            <UploadOutlined />
+                        </p>
+                        <p className="ant-upload-text">Nhấp hoặc kéo thả file ảnh vào đây</p>
+                        <p className="ant-upload-hint text-gray-500">
+                            Chỉ chấp nhận file ảnh, kích thước tối đa 5MB
+                        </p>
+                    </Upload.Dragger>
+                </div>
+            </Modal>
+        </>
     );
-}
+};
+
+const PaymentQR = (props) => {
+    return (
+        <App>
+            <PaymentQRContent {...props} />
+        </App>
+    );
+};
 
 export default PaymentQR; 

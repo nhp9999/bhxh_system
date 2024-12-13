@@ -1,245 +1,355 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Card, Button, Space, Tag, message, Modal, Descriptions, Popconfirm } from 'antd';
-import { useNavigate, useParams } from 'react-router-dom';
-import { PlusOutlined, DeleteOutlined, HistoryOutlined } from '@ant-design/icons';
+import { 
+    Table, 
+    Button, 
+    Space, 
+    Tag, 
+    Modal, 
+    message, 
+    Card, 
+    Typography, 
+    Input, 
+    Row, 
+    Col,
+    Tooltip,
+    Badge,
+    Statistic,
+    theme
+} from 'antd';
+import {
+    DeleteOutlined,
+    EditOutlined,
+    EyeOutlined,
+    SearchOutlined,
+    FileExcelOutlined,
+    PlusOutlined,
+    FilterOutlined,
+    SyncOutlined
+} from '@ant-design/icons';
+import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import api from '../../api';
 
+const { Title, Text } = Typography;
+const { Search } = Input;
+const { useToken } = theme;
+
 const DeclarationList = () => {
-    const [loading, setLoading] = useState(false);
-    const [declarations, setDeclarations] = useState([]);
-    const [deleteLoading, setDeleteLoading] = useState({});
     const navigate = useNavigate();
+    const [declarations, setDeclarations] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [searchText, setSearchText] = useState('');
     const [selectedDeclaration, setSelectedDeclaration] = useState(null);
-    const [detailModalVisible, setDetailModalVisible] = useState(false);
-    const { batchId } = useParams();
+    const [isDetailModalVisible, setIsDetailModalVisible] = useState(false);
+    const [statistics, setStatistics] = useState({
+        total: 0,
+        pending: 0,
+        approved: 0,
+        rejected: 0,
+        totalAmount: 0,
+        approvedAmount: 0
+    });
+    const { token } = useToken();
+
+    useEffect(() => {
+        fetchDeclarations();
+        fetchStatistics();
+    }, []);
 
     const fetchDeclarations = async () => {
-        setLoading(true);
         try {
-            const response = await api.get(`/declarations/batch/${batchId}`);
-            setDeclarations(response.data);
+            setLoading(true);
+            const response = await api.get('/declarations/employee/declarations');
+            if (response.data.success) {
+                setDeclarations(response.data.data);
+            }
         } catch (error) {
-            console.error('Không thể tải danh sách kê khai:', error);
-            message.error('Không thể tải danh sách kê khai');
+            message.error('Lỗi khi tải danh sách kê khai');
         } finally {
             setLoading(false);
         }
     };
 
-    useEffect(() => {
-        if (batchId) {
-            fetchDeclarations();
-        }
-    }, [batchId]);
-
-    const handleSoftDelete = async (record) => {
+    const fetchStatistics = async () => {
         try {
-            setDeleteLoading(prev => ({ ...prev, [record.id]: true }));
-            // Gọi API để soft delete bản ghi
-            await api.delete(`/declarations/employee/${record.id}/soft-delete`);
-            message.success('Xóa bản ghi thành công');
-            // Cập nhật lại danh sách sau khi soft delete
-            fetchDeclarations();
+            const response = await api.get('/declarations/employee/statistics');
+            if (response.data.success) {
+                setStatistics(response.data.data);
+            }
         } catch (error) {
-            console.error('Không thể xóa bản ghi:', error);
-            message.error('Không thể xóa bản ghi');
-        } finally {
-            setDeleteLoading(prev => ({ ...prev, [record.id]: false }));
+            console.error('Lỗi khi tải thống kê:', error);
         }
     };
 
-    const showDetailModal = async (record) => {
-        try {
-            const response = await api.get(`/declarations/employee/${record.id}`);
-            setSelectedDeclaration(response.data);
-            setDetailModalVisible(true);
-        } catch (error) {
-            console.error('Không thể tải chi tiết kê khai:', error);
-            message.error('Không thể tải chi tiết kê khai');
-        }
+    const handleDelete = (record) => {
+        Modal.confirm({
+            title: 'Xác nhận xóa',
+            content: 'Bạn có chắc chắn muốn xóa kê khai này?',
+            okText: 'Xóa',
+            cancelText: 'Hủy',
+            okButtonProps: { 
+                danger: true,
+                icon: <DeleteOutlined />
+            },
+            onOk: async () => {
+                try {
+                    const response = await api.delete(\`/declarations/employee/declaration/\${record.id}\`);
+                    if (response.data.success) {
+                        message.success('Xóa kê khai thành công');
+                        fetchDeclarations();
+                        fetchStatistics();
+                    }
+                } catch (error) {
+                    message.error('Lỗi khi xóa kê khai');
+                }
+            }
+        });
+    };
+
+    const handleEdit = (record) => {
+        navigate(\`/employee/declarations/edit/\${record.id}\`);
+    };
+
+    const showDetailModal = (record) => {
+        setSelectedDeclaration(record);
+        setIsDetailModalVisible(true);
+    };
+
+    const getStatusTag = (status) => {
+        const statusConfig = {
+            pending: { color: 'gold', text: 'Chờ duyệt' },
+            approved: { color: 'success', text: 'Đã duyệt' },
+            rejected: { color: 'error', text: 'Từ chối' }
+        };
+        const config = statusConfig[status] || { color: 'default', text: status };
+        return <Tag color={config.color}>{config.text}</Tag>;
     };
 
     const columns = [
-        {
-            title: 'Mã kê khai',
-            dataIndex: 'display_code',
-            key: 'display_code',
-            width: 150,
-        },
         {
             title: 'Mã BHXH',
             dataIndex: 'bhxh_code',
             key: 'bhxh_code',
             width: 120,
+            fixed: 'left',
+            render: (text) => <Text copyable>{text}</Text>
         },
         {
-            title: 'Họ tên',
+            title: 'Họ và tên',
             dataIndex: 'full_name',
             key: 'full_name',
-            width: 200,
+            width: 180,
+            render: (text) => <Text strong>{text}</Text>
         },
         {
             title: 'CCCD',
             dataIndex: 'cccd',
             key: 'cccd',
-            width: 150,
+            width: 140,
+            render: (text) => <Text copyable>{text}</Text>
         },
         {
-            title: 'Số điện thoại',
-            dataIndex: 'phone_number',
-            key: 'phone_number',
+            title: 'Ngày sinh',
+            dataIndex: 'birth_date',
+            key: 'birth_date',
             width: 120,
+            render: (date) => date ? dayjs(date).format('DD/MM/YYYY') : ''
         },
         {
-            title: 'Phương án',
-            dataIndex: 'plan',
-            key: 'plan',
-            width: 100,
-            render: (plan) => plan === 'TM' ? 'Thu mới' : 'Ốm nặng'
+            title: 'Số người tham gia',
+            dataIndex: 'participant_number',
+            key: 'participant_number',
+            width: 150,
+            render: (number) => (
+                <Badge 
+                    count={number} 
+                    style={{ 
+                        backgroundColor: token.colorPrimary,
+                        fontWeight: 'bold'
+                    }} 
+                />
+            )
         },
         {
-            title: 'Số tháng',
-            dataIndex: 'months',
-            key: 'months',
-            width: 100,
-            render: (months) => `${months} tháng`
+            title: 'Số tiền',
+            dataIndex: 'actual_amount',
+            key: 'actual_amount',
+            width: 150,
+            render: (amount) => (
+                <Text strong style={{ color: token.colorSuccess }}>
+                    {amount?.toLocaleString()}đ
+                </Text>
+            )
         },
         {
             title: 'Trạng thái',
             dataIndex: 'status',
             key: 'status',
             width: 120,
-            render: (status) => {
-                let color = 'default';
-                let text = 'Nháp';
-
-                switch (status) {
-                    case 'submitted':
-                        color = 'processing';
-                        text = 'Đã nộp';
-                        break;
-                    case 'approved':
-                        color = 'success';
-                        text = 'Đã duyệt';
-                        break;
-                    case 'rejected':
-                        color = 'error';
-                        text = 'Từ chối';
-                        break;
-                    default:
-                        break;
-                }
-
-                return <Tag color={color}>{text}</Tag>;
-            },
-        },
-        {
-            title: 'Ngày tạo',
-            dataIndex: 'created_at',
-            key: 'created_at',
-            width: 120,
-            render: (date) => dayjs(date).format('DD/MM/YYYY'),
+            render: getStatusTag
         },
         {
             title: 'Thao tác',
             key: 'action',
             fixed: 'right',
-            width: 150,
+            width: 180,
             render: (_, record) => (
-                <Space>
-                    <Button 
-                        type="link" 
-                        onClick={() => showDetailModal(record)}
-                    >
-                        Xem chi tiết
-                    </Button>
-                    <Popconfirm
-                        title="Bạn có chắc chắn muốn xóa bản ghi này?"
-                        description="Bản ghi sẽ bị xóa khỏi đợt kê khai này"
-                        onConfirm={() => handleSoftDelete(record)}
-                        okText="Đồng ý"
-                        cancelText="Hủy"
-                    >
-                        <Button 
-                            type="link" 
-                            danger
-                            loading={deleteLoading[record.id]}
-                            icon={<DeleteOutlined />}
-                        >
-                            Xóa
-                        </Button>
-                    </Popconfirm>
+                <Space size="middle">
+                    <Tooltip title="Xem chi tiết">
+                        <Button
+                            type="text"
+                            icon={<EyeOutlined />}
+                            onClick={() => showDetailModal(record)}
+                        />
+                    </Tooltip>
+                    {record.status === 'pending' && (
+                        <>
+                            <Tooltip title="Chỉnh sửa">
+                                <Button
+                                    type="text"
+                                    icon={<EditOutlined />}
+                                    onClick={() => handleEdit(record)}
+                                />
+                            </Tooltip>
+                            <Tooltip title="Xóa">
+                                <Button
+                                    type="text"
+                                    danger
+                                    icon={<DeleteOutlined />}
+                                    onClick={() => handleDelete(record)}
+                                />
+                            </Tooltip>
+                        </>
+                    )}
                 </Space>
-            ),
-        },
+            )
+        }
     ];
 
     return (
-        <>
-            <Card 
-                title="Danh sách kê khai" 
-                extra={
+        <div style={{ padding: '24px' }}>
+            {/* Thống kê */}
+            <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+                <Col xs={24} sm={12} md={8} lg={6}>
+                    <Card bordered={false} hoverable>
+                        <Statistic
+                            title="Tổng số kê khai"
+                            value={statistics.total}
+                            prefix={<FileExcelOutlined />}
+                            valueStyle={{ color: token.colorPrimary }}
+                        />
+                    </Card>
+                </Col>
+                <Col xs={24} sm={12} md={8} lg={6}>
+                    <Card bordered={false} hoverable>
+                        <Statistic
+                            title="Chờ duyệt"
+                            value={statistics.pending}
+                            prefix={<SyncOutlined spin />}
+                            valueStyle={{ color: token.colorWarning }}
+                        />
+                    </Card>
+                </Col>
+                <Col xs={24} sm={12} md={8} lg={6}>
+                    <Card bordered={false} hoverable>
+                        <Statistic
+                            title="Đã duyệt"
+                            value={statistics.approved}
+                            valueStyle={{ color: token.colorSuccess }}
+                        />
+                    </Card>
+                </Col>
+                <Col xs={24} sm={12} md={8} lg={6}>
+                    <Card bordered={false} hoverable>
+                        <Statistic
+                            title="Tổng số tiền"
+                            value={statistics.totalAmount}
+                            suffix="đ"
+                            precision={0}
+                            valueStyle={{ color: token.colorSuccess }}
+                        />
+                    </Card>
+                </Col>
+            </Row>
+
+            {/* Thanh công cụ */}
+            <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+                <Col flex="auto">
+                    <Space size="middle">
+                        <Search
+                            placeholder="Tìm kiếm theo mã BHXH, CCCD, họ tên..."
+                            allowClear
+                            enterButton={<SearchOutlined />}
+                            style={{ width: 300 }}
+                            onChange={(e) => setSearchText(e.target.value)}
+                        />
+                        <Tooltip title="Lọc nâng cao">
+                            <Button icon={<FilterOutlined />}>Lọc</Button>
+                        </Tooltip>
+                    </Space>
+                </Col>
+                <Col>
                     <Space>
-                        <Button
-                            icon={<HistoryOutlined />}
-                            onClick={() => navigate('/employee/declarations/history')}
-                        >
-                            Tra cứu lịch sử
-                        </Button>
-                        <Button
+                        <Button 
                             type="primary"
                             icon={<PlusOutlined />}
                             onClick={() => navigate('/employee/declarations/create/batch')}
                         >
-                            Tạo kê khai mới
+                            Tạo đợt kê khai
                         </Button>
+                        <Tooltip title="Làm mới dữ liệu">
+                            <Button 
+                                icon={<SyncOutlined />} 
+                                onClick={() => {
+                                    fetchDeclarations();
+                                    fetchStatistics();
+                                }}
+                            />
+                        </Tooltip>
                     </Space>
-                }
-            >
+                </Col>
+            </Row>
+
+            {/* Bảng dữ liệu */}
+            <Card bordered={false}>
                 <Table
                     columns={columns}
-                    dataSource={declarations}
-                    rowKey="id"
+                    dataSource={declarations.filter(item =>
+                        Object.values(item).some(val =>
+                            String(val).toLowerCase().includes(searchText.toLowerCase())
+                        )
+                    )}
                     loading={loading}
                     scroll={{ x: 1500 }}
+                    rowKey="id"
                     pagination={{
-                        defaultPageSize: 10,
+                        total: declarations.length,
+                        pageSize: 10,
+                        showTotal: (total, range) => `${range[0]}-${range[1]} của ${total} kê khai`,
                         showSizeChanger: true,
-                        showTotal: (total) => `Tổng số ${total} kê khai`,
-                        pageSizeOptions: ['10', '20', '50', '100']
+                        showQuickJumper: true
                     }}
                 />
             </Card>
 
+            {/* Modal chi tiết */}
             <Modal
-                title="Chi tiết kê khai"
-                open={detailModalVisible}
-                onCancel={() => setDetailModalVisible(false)}
+                title={<Title level={4}>Chi tiết kê khai</Title>}
+                open={isDetailModalVisible}
+                onCancel={() => setIsDetailModalVisible(false)}
                 footer={null}
                 width={800}
             >
                 {selectedDeclaration && (
                     <Descriptions bordered column={2}>
-                        <Descriptions.Item label="Mã kê khai">
-                            {selectedDeclaration.display_code}
-                        </Descriptions.Item>
-                        <Descriptions.Item label="Trạng thái">
-                            <Tag color={
-                                selectedDeclaration.status === 'approved' ? 'success' :
-                                selectedDeclaration.status === 'submitted' ? 'processing' :
-                                selectedDeclaration.status === 'rejected' ? 'error' : 'default'
-                            }>
-                                {selectedDeclaration.status === 'approved' ? 'Đã duyệt' :
-                                 selectedDeclaration.status === 'submitted' ? 'Đã nộp' :
-                                 selectedDeclaration.status === 'rejected' ? 'Từ chối' : 'Nháp'}
-                            </Tag>
+                        <Descriptions.Item label="Mã BHXH" span={2}>
+                            <Text copyable>{selectedDeclaration.bhxh_code}</Text>
                         </Descriptions.Item>
                         <Descriptions.Item label="Họ và tên">
                             {selectedDeclaration.full_name}
                         </Descriptions.Item>
-                        <Descriptions.Item label="Mã BHXH">
-                            {selectedDeclaration.bhxh_code}
+                        <Descriptions.Item label="CCCD">
+                            <Text copyable>{selectedDeclaration.cccd}</Text>
                         </Descriptions.Item>
                         <Descriptions.Item label="Ngày sinh">
                             {dayjs(selectedDeclaration.birth_date).format('DD/MM/YYYY')}
@@ -247,50 +357,27 @@ const DeclarationList = () => {
                         <Descriptions.Item label="Giới tính">
                             {selectedDeclaration.gender}
                         </Descriptions.Item>
-                        <Descriptions.Item label="CCCD">
-                            {selectedDeclaration.cccd}
-                        </Descriptions.Item>
                         <Descriptions.Item label="Số điện thoại">
                             {selectedDeclaration.phone_number}
-                        </Descriptions.Item>
-                        <Descriptions.Item label="Ngày nhận">
-                            {dayjs(selectedDeclaration.receipt_date).format('DD/MM/YYYY')}
-                        </Descriptions.Item>
-                        <Descriptions.Item label="Ngày hết hạn thẻ cũ">
-                            {selectedDeclaration.old_card_expiry_date ? 
-                             dayjs(selectedDeclaration.old_card_expiry_date).format('DD/MM/YYYY') : 'N/A'}
-                        </Descriptions.Item>
-                        <Descriptions.Item label="Ngày hiệu lực thẻ mới">
-                            {dayjs(selectedDeclaration.new_card_effective_date).format('DD/MM/YYYY')}
-                        </Descriptions.Item>
-                        <Descriptions.Item label="Số tháng">
-                            {selectedDeclaration.months} tháng
-                        </Descriptions.Item>
-                        <Descriptions.Item label="Phương án">
-                            {selectedDeclaration.plan === 'TM' ? 'Thu mới' : 'Ốm nặng'}
-                        </Descriptions.Item>
-                        <Descriptions.Item label="Phường/Xã">
-                            {selectedDeclaration.commune}
-                        </Descriptions.Item>
-                        <Descriptions.Item label="Thôn/Xóm">
-                            {selectedDeclaration.hamlet}
                         </Descriptions.Item>
                         <Descriptions.Item label="Số người tham gia">
                             {selectedDeclaration.participant_number} người
                         </Descriptions.Item>
-                        <Descriptions.Item label="Mã bệnh viện">
-                            {selectedDeclaration.hospital_code}
+                        <Descriptions.Item label="Số tiền">
+                            <Text strong style={{ color: token.colorSuccess }}>
+                                {selectedDeclaration.actual_amount?.toLocaleString()}đ
+                            </Text>
+                        </Descriptions.Item>
+                        <Descriptions.Item label="Trạng thái">
+                            {getStatusTag(selectedDeclaration.status)}
                         </Descriptions.Item>
                         <Descriptions.Item label="Ngày tạo">
                             {dayjs(selectedDeclaration.created_at).format('DD/MM/YYYY HH:mm')}
                         </Descriptions.Item>
-                        <Descriptions.Item label="Người tạo">
-                            {selectedDeclaration.created_by}
-                        </Descriptions.Item>
                     </Descriptions>
                 )}
             </Modal>
-        </>
+        </div>
     );
 };
 

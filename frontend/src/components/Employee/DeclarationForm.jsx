@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Card, Form, Input, DatePicker, Select, Button, message, Typography, Spin, Row, Col, Table, Tag, Modal, Space, Popconfirm, notification, Descriptions, Collapse, InputNumber } from 'antd';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeftOutlined, SaveOutlined, DeleteOutlined, SearchOutlined, ReloadOutlined, EditOutlined, EyeOutlined, UnorderedListOutlined, CaretRightOutlined, LeftOutlined, RightOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, SaveOutlined, DeleteOutlined, SearchOutlined, ReloadOutlined, EditOutlined, EyeOutlined, UnorderedListOutlined, CaretRightOutlined, LeftOutlined, RightOutlined, SendOutlined } from '@ant-design/icons';
 import api from '../../api';
 import dayjs from 'dayjs';
 import weekday from 'dayjs/plugin/weekday';
@@ -179,7 +179,7 @@ const HOSPITALS = [
     'Trung tâm Y t huyện Phú Tân',
     'Trung tâm Y tế huyện Tịnh Biên',
     'Trung tâm Y tế huyện Tri Tôn',
-    'Trung tâm Y t�� huyện Châu Phú',
+    'Trung tâm Y tế huyện Châu Phú',
     'Trung tâm Y tế huyện Chợ Mới',
     'Trung tâm Y tế huyện Châu Thành',
     'Trung tâm Y tế huyện Thoại Sơn',
@@ -296,25 +296,23 @@ const DeclarationForm = () => {
     // Xử lý khi thay đổi ngày tháng
     const handleDateChange = useCallback(() => {
         const receipt_date = form.getFieldValue('receipt_date');
+        const old_card_expiry_date = form.getFieldValue('old_card_expiry_date');
+        
+        console.log('Date Change - Receipt Date:', receipt_date?.format('DD/MM/YYYY'));
+        console.log('Date Change - Old Card Expiry:', old_card_expiry_date?.format('DD/MM/YYYY'));
+        console.log('Date Change - Object Type:', objectType);
         
         // Nếu không có ngày biên lai, không làm gì cả
         if (!receipt_date) return;
 
-        let new_date = null;
-
-        // Xử lý đơn giản theo từng loại đối tượng
-        if (objectType === 'DTTS') {
-            // Đối với DTTS: lấy ngày đầu tháng
-            new_date = dayjs(receipt_date).startOf('month');
-        } else {
-            // Đối với các loại khác: + 30 ngày
-            new_date = dayjs(receipt_date).add(30, 'day');
-        }
-
+        const newDate = calculateNewCardEffectiveDate(objectType, receipt_date, old_card_expiry_date);
+        
+        console.log('Date Change - Calculated New Date:', newDate?.format('DD/MM/YYYY'));
+        
         // Cập nhật ngày mới
-        if (new_date) {
+        if (newDate && newDate.isValid()) {
             form.setFieldsValue({
-                new_card_effective_date: new_date
+                new_card_effective_date: newDate
             });
         }
     }, [form, objectType]);
@@ -323,26 +321,24 @@ const DeclarationForm = () => {
     const handleReceiptDateSelect = (date) => {
         if (!date) return;
         
-        // Đảm bảo date là một đối tượng dayjs hợp lệ
-        const validDate = dayjs(date);
+        const validDate = dayjs(date).startOf('day');
         if (!validDate.isValid()) return;
         
         form.setFieldsValue({
             receipt_date: validDate
         });
         
-        // Tính toán ngày hiệu lực mới
-        let new_date = null;
-        
-        if (objectType === 'DTTS') {
-            new_date = validDate.startOf('month');
-        } else {
-            new_date = validDate.add(30, 'day');
+        const oldCardExpiryDate = form.getFieldValue('old_card_expiry_date');
+        if (oldCardExpiryDate) {
+            form.setFieldsValue({
+                old_card_expiry_date: dayjs(oldCardExpiryDate).startOf('day')
+            });
         }
         
-        if (new_date && new_date.isValid()) {
+        const newDate = calculateNewCardEffectiveDate(objectType, validDate, oldCardExpiryDate);
+        if (newDate && newDate.isValid()) {
             form.setFieldsValue({
-                new_card_effective_date: new_date
+                new_card_effective_date: newDate
             });
         }
     };
@@ -507,11 +503,12 @@ const DeclarationForm = () => {
     const calculateNewCardEffectiveDate = (objectType, receiptDate, oldCardExpiryDate) => {
         if (!objectType || !receiptDate) return null;
         
-        const receipt = dayjs(receiptDate);
+        // Đảm bảo các ngày đều ở định dạng YYYY-MM-DD để tránh vấn đề múi giờ
+        const receipt = dayjs(receiptDate).startOf('day');
+        console.log('Calculate - Input Receipt Date:', receipt.format('YYYY-MM-DD'));
 
         // Trường hợp đối tượng DTTS
         if (objectType === 'DTTS') {
-            // Ngày đầu tháng của ngày biên lai
             return receipt.startOf('month');
         }
 
@@ -519,19 +516,27 @@ const DeclarationForm = () => {
         if (objectType === 'HGD' || objectType === 'NLNN') {
             // Nếu không có ngày hết hạn thẻ cũ
             if (!oldCardExpiryDate) {
-                return receipt.add(30, 'day');
+                const result = receipt.add(30, 'day');
+                console.log('Calculate - No Old Card, Adding 30 days:', result.format('YYYY-MM-DD'));
+                return result;
             }
 
-            // Tính số ngày chênh lệch giữa ngày hết hạn thẻ cũ và ngày biên lai
-            const diffDays = Math.abs(dayjs(oldCardExpiryDate).diff(receipt, 'day'));
+            // Đảm bảo oldCardExpiryDate cũng ở định dạng YYYY-MM-DD
+            const oldExpiry = dayjs(oldCardExpiryDate).startOf('day');
+            console.log('Calculate - Old Expiry Date:', oldExpiry.format('YYYY-MM-DD'));
 
-            // Nếu số ngày chênh lệch nhỏ hơn 90 ngày
+            // Tính số ngày chênh lệch
+            const diffDays = oldExpiry.diff(receipt, 'day');
+            console.log('Calculate - Diff Days:', diffDays);
+
             if (diffDays < 90) {
-                return receipt.add(1, 'day');
-            } 
-            // Nếu số ngày chênh lệch lớn hơn hoặc bằng 90 ngày
-            else {
-                return receipt.add(30, 'day');
+                const result = receipt.add(1, 'day');
+                console.log('Calculate - Diff < 90, Adding 1 day:', result.format('YYYY-MM-DD'));
+                return result;
+            } else {
+                const result = receipt.add(30, 'day');
+                console.log('Calculate - Diff >= 90, Adding 30 days:', result.format('YYYY-MM-DD'));
+                return result;
             }
         }
 
@@ -748,9 +753,7 @@ const DeclarationForm = () => {
                 'birth_date',
                 'gender',
                 'cccd',
-                'phone_number',
                 'receipt_date',
-                'receipt_number',
                 'months',
                 'plan',
                 'commune',
@@ -761,7 +764,7 @@ const DeclarationForm = () => {
 
             const missingFields = requiredFields.filter(field => !formData[field]);
             if (missingFields.length > 0) {
-                message.error(`Vui lòng điền đầy đủ các trường: ${missingFields.join(', ')}`);
+                message.error(`Vui lòng điền đ���y đủ các trường: ${missingFields.join(', ')}`);
                 return;
             }
 
@@ -794,7 +797,7 @@ const DeclarationForm = () => {
     const handleFormReset = () => {
         Modal.confirm({
             title: 'Xác nhận hủy',
-            content: 'Bạn có chắc chắn muốn hủy? Mội thông tin đã nhập sẽ bị mất.',
+            content: 'Bạn có chắc chắn muốn hủy? Mội thông tin đã nh���p sẽ bị mất.',
             okText: 'Đồng ý',
             cancelText: 'Hủy',
             onOk: () => {
@@ -950,7 +953,7 @@ const DeclarationForm = () => {
             width: 150
         },
         {
-            title: 'Bệnh viện đăng ký',
+            title: 'Bệnh viện đăng k��',
             dataIndex: 'hospital_code',
             key: 'hospital_code',
             width: 200
@@ -1002,9 +1005,98 @@ const DeclarationForm = () => {
                 onCancel={() => setIsAllDeclarationsModalVisible(false)}
                 width={1200}
                 footer={null}
+                className="declarations-modal"
             >
+                <div className="mb-4 flex justify-end items-center space-x-2">
+                    <span className="text-sm text-gray-500">Số tiền hỗ trợ mỗi kê khai:</span>
+                    <InputNumber
+                        value={supportAmountPerDeclaration}
+                        onChange={handleSupportAmountChange}
+                        formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                        parser={value => value.replace(/\$\s?|(,*)/g, '')}
+                        addonAfter="VND"
+                        className="w-40"
+                        min={0}
+                    />
+                </div>
+
                 <Table
-                    columns={columns}
+                    columns={[
+                        {
+                            title: 'Mã BHXH',
+                            dataIndex: 'bhxh_code',
+                            key: 'bhxh_code',
+                            width: 120,
+                            fixed: 'left',
+                            ...getColumnSearchProps('bhxh_code', 'mã BHXH')
+                        },
+                        {
+                            title: 'Họ và tên',
+                            dataIndex: 'full_name',
+                            key: 'full_name',
+                            width: 180,
+                            fixed: 'left',
+                            ...getColumnSearchProps('full_name', 'họ tên')
+                        },
+                        {
+                            title: 'CCCD',
+                            dataIndex: 'cccd',
+                            key: 'cccd',
+                            width: 140,
+                            ...getColumnSearchProps('cccd', 'CCCD')
+                        },
+                        {
+                            title: 'Ngày sinh',
+                            dataIndex: 'birth_date',
+                            key: 'birth_date',
+                            width: 120,
+                            render: (date) => date ? dayjs(date).format('DD/MM/YYYY') : ''
+                        },
+                        {
+                            title: 'Giới tính',
+                            dataIndex: 'gender',
+                            key: 'gender',
+                            width: 100,
+                            filters: [
+                                { text: 'Nam', value: 'Nam' },
+                                { text: 'Nữ', value: 'Nữ' }
+                            ],
+                            onFilter: (value, record) => record.gender === value
+                        },
+                        {
+                            title: 'Số điện thoại',
+                            dataIndex: 'phone_number',
+                            key: 'phone_number',
+                            width: 120
+                        },
+                        {
+                            title: 'Số người tham gia',
+                            dataIndex: 'participant_number',
+                            key: 'participant_number',
+                            width: 150,
+                            filters: [
+                                { text: '1 người', value: '1' },
+                                { text: '2 người', value: '2' },
+                                { text: '3 người', value: '3' },
+                                { text: '4 người', value: '4' },
+                                { text: '5 người', value: '5' }
+                            ],
+                            onFilter: (value, record) => record.participant_number === value
+                        },
+                        {
+                            title: 'Số biên lai',
+                            dataIndex: 'receipt_number',
+                            key: 'receipt_number',
+                            width: 120
+                        },
+                        {
+                            title: 'Ngày biên lai',
+                            dataIndex: 'receipt_date',
+                            key: 'receipt_date',
+                            width: 120,
+                            render: (date) => date ? dayjs(date).format('DD/MM/YYYY') : ''
+                        }
+                    ]}
                     dataSource={declarations}
                     scroll={{ x: 1500, y: 500 }}
                     pagination={{
@@ -1017,29 +1109,27 @@ const DeclarationForm = () => {
                     size="small"
                     rowKey="id"
                 />
-                <div className="mt-4 flex justify-between items-center">
-                    <div>
-                        <div className="font-medium">
-                            Tổng số tiền: {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(totalAmount)}
+
+                <div className="mt-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <div className="grid grid-cols-3 gap-4">
+                        <div className="text-sm">
+                            <div className="text-gray-500 mb-1">Tổng số tiền</div>
+                            <div className="font-medium text-gray-900">
+                                {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(totalAmount)}
+                            </div>
                         </div>
-                        <div className="font-medium">
-                            Tổng tiền hỗ trợ: {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(totalSupportAmount)}
+                        <div className="text-sm">
+                            <div className="text-gray-500 mb-1">Tổng tiền hỗ trợ</div>
+                            <div className="font-medium text-blue-600">
+                                {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(totalSupportAmount)}
+                            </div>
                         </div>
-                        <div className="font-medium">
-                            Số tiền phải đóng: {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(totalAmount - totalSupportAmount)}
+                        <div className="text-sm">
+                            <div className="text-gray-500 mb-1">Số tiền cần đóng</div>
+                            <div className="font-medium text-green-600">
+                                {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(totalAmount - totalSupportAmount)}
+                            </div>
                         </div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                        <span className="text-sm text-gray-500">Số tiền hỗ trợ mỗi kê khai:</span>
-                        <InputNumber
-                            value={supportAmountPerDeclaration}
-                            onChange={handleSupportAmountChange}
-                            formatter={value => `${value}`.replace(/\$\s?|(,*)/g, ',')}
-                            parser={value => value.replace(/\$\s?|(,*)/g, '')}
-                            addonAfter="VND"
-                            className="w-32"
-                            min={0}
-                        />
                     </div>
                 </div>
             </Modal>
@@ -1055,19 +1145,91 @@ const DeclarationForm = () => {
         setIsAllDeclarationsModalVisible(false);
     };
 
+    // Hàm tính số tiền dựa trên loại đối tượng và số người tham gia
+    const calculateAmount = useCallback((objectType, participantNumber, months) => {
+        const baseAmount = 2340000; // Mức lương cơ bản
+        const baseRate = 0.045; // Tỷ lệ 4.5%
+        let amount = 0;
+
+        switch(objectType) {
+            case 'HGD':
+                // Tính cho người thứ nhất
+                amount = baseAmount * baseRate * months;
+                
+                // Tính cho những người tiếp theo với tỷ lệ giảm dần
+                if (participantNumber >= 2) {
+                    amount += baseAmount * baseRate * 0.7 * months; // Người thứ 2: giảm 30%
+                }
+                if (participantNumber >= 3) {
+                    amount += baseAmount * baseRate * 0.6 * months; // Người thứ 3: giảm 40%
+                }
+                if (participantNumber >= 4) {
+                    amount += baseAmount * baseRate * 0.5 * months; // Người thứ 4: giảm 50%
+                }
+                if (participantNumber >= 5) {
+                    amount += baseAmount * baseRate * 0.4 * months; // Người thứ 5: giảm 60%
+                }
+                break;
+
+            case 'DTTS':
+                // DTTS: 2.340.000 × 4,5% × (100% - 70%) x số tháng đóng
+                amount = baseAmount * baseRate * 0.3 * months; // 100% - 70% = 30%
+                break;
+
+            case 'NLNN':
+                // NLNN: 2.340.000 × 4,5% × (100% - 30%) x số tháng đóng
+                amount = baseAmount * baseRate * 0.7 * months; // 100% - 30% = 70%
+                break;
+
+            default:
+                amount = 0;
+        }
+
+        return Math.round(amount); // Làm tròn số tiền
+    }, []);
+
     // Xử lý khi thay đổi loại đối tượng
-    const handleObjectTypeChange = (value) => {
+    const handleObjectTypeChange = useCallback((value) => {
         console.log('Object type changed:', value);
         
+        // Cập nhật số người tham gia
+        const newParticipantNumber = value === 'DTTS' ? '1' : form.getFieldValue('participant_number');
+        const months = Number(form.getFieldValue('months')) || 12;
+        
         form.setFieldsValue({
-            participant_number: value === 'DTTS' ? '1' : undefined,
+            participant_number: newParticipantNumber,
             old_card_number: undefined,
             old_card_expiry_date: undefined
         });
         
         setObjectType(value);
+        
+        // Tính lại số tiền dựa trên loại đối tượng mới
+        const amount = calculateAmount(value, Number(newParticipantNumber), months);
+        setTotalAmount(amount);
+        
         handleDateChange();
-    };
+    }, [form, handleDateChange, calculateAmount]);
+
+    // Xử lý khi thay đổi số người tham gia
+    const handleParticipantNumberChange = useCallback((value) => {
+        if (!value) return;
+        
+        const months = Number(form.getFieldValue('months')) || 12;
+        // Tính lại số tiền dựa trên số người tham gia mới
+        const amount = calculateAmount(objectType, Number(value), months);
+        setTotalAmount(amount);
+    }, [objectType, calculateAmount, form]);
+
+    // Xử lý khi thay đổi số tháng đóng
+    const handleMonthsChange = useCallback((value) => {
+        if (!value) return;
+        
+        const participantNumber = Number(form.getFieldValue('participant_number')) || 1;
+        // Tính lại số tiền khi thay đổi số tháng
+        const amount = calculateAmount(objectType, participantNumber, Number(value));
+        setTotalAmount(amount);
+    }, [objectType, calculateAmount, form]);
 
     // Tính toán dữ liệu cho trang hiện tại
     const getCurrentPageData = () => {
@@ -1158,7 +1320,7 @@ const DeclarationForm = () => {
         );
     };
 
-    // Xử lý khi thay đổi giá trị tìm kiếm
+    // Xử lý khi thay đổi gi�� trị tìm kiếm
     const handleSearchValueChange = (field, value) => {
         const trimmedValue = value.trim();
         form.setFieldValue(field, trimmedValue);
@@ -1212,6 +1374,42 @@ const DeclarationForm = () => {
         }
     }, [userInfo]);
 
+    // Thêm hàm xử lý gửi đợt kê khai
+    const handleSubmitBatch = async () => {
+        try {
+            const confirmed = await new Promise((resolve) => {
+                Modal.confirm({
+                    title: 'Xác nhận gửi',
+                    content: `Bạn có chắc chắn muốn gửi đợt kê khai "${batch?.name}" không?`,
+                    okText: 'Gửi',
+                    okType: 'primary',
+                    cancelText: 'Hủy',
+                    onOk: () => resolve(true),
+                    onCancel: () => resolve(false),
+                });
+            });
+
+            if (!confirmed) return;
+
+            setSubmitting(true);
+            const response = await api.post(`/declarations/employee/batch/${batchId}/submit`);
+
+            if (response.data.success) {
+                message.success('Gửi đợt kê khai thành công');
+                navigate('/employee/declarations/create/batch');
+            }
+        } catch (error) {
+            console.error('Submit error:', error);
+            if (error.response?.data?.error?.includes('declaration_batch_month_year_batch_number_department_code_o_key')) {
+                message.error('Đã tồn tại đợt kê khai với cùng tháng, năm, số đợt, loại đối tượng và loại dịch vụ');
+            } else {
+                message.error(error.response?.data?.message || 'Có lỗi xảy ra khi gửi đợt kê khai');
+            }
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
     return (
         <div className="container mx-auto py-2">
             <div className="flex space-x-6">
@@ -1246,13 +1444,25 @@ const DeclarationForm = () => {
                                             Đối tượng: {getObjectTypeName(batch?.object_type)}
                                         </div>
                                     </div>
-                                    <Button
-                                        icon={<ArrowLeftOutlined />}
-                                        onClick={() => navigate('/employee/declarations/create/batch')}
-                                        size="middle"
-                                    >
-                                        Quay lại
-                                    </Button>
+                                    <div className="flex items-center space-x-2">
+                                        <Button
+                                            type="primary"
+                                            onClick={() => handleSubmitBatch()}
+                                            icon={<SendOutlined />}
+                                            loading={submitting}
+                                            className="h-9 px-6 text-base font-medium"
+                                            disabled={!declarations?.length || batch?.status !== 'pending'}
+                                        >
+                                            Gửi đợt kê khai
+                                        </Button>
+                                        <Button
+                                            icon={<ArrowLeftOutlined />}
+                                            onClick={() => navigate('/employee/declarations/create/batch')}
+                                            size="middle"
+                                        >
+                                            Quay lại
+                                        </Button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1349,11 +1559,15 @@ const DeclarationForm = () => {
                                             name="phone_number"
                                             label={<span className="text-sm">Số điện thoại</span>}
                                             rules={[
-                                                { required: true, message: 'Vui lòng nhập số điện thoại' },
                                                 { pattern: /^\d{10}$/, message: 'Số điện thoại phải có 10 chữ số' }
                                             ]}
                                         >
-                                            <Input maxLength={10} placeholder="Nhập số điện thoại" className="h-9" />
+                                            <Input 
+                                                maxLength={10}
+                                                placeholder="Nhập số điện thoại" 
+                                                className="h-9"
+                                                allowClear
+                                            />
                                         </Form.Item>
                                     </Col>
                                     <Col span={8}>
@@ -1367,6 +1581,7 @@ const DeclarationForm = () => {
                                                 disabled={objectType === 'DTTS'}
                                                 value={objectType === 'DTTS' ? '1' : form.getFieldValue('participant_number')}
                                                 className="h-9"
+                                                onChange={handleParticipantNumberChange}
                                             >
                                                 <Option value="1">1 người</Option>
                                                 <Option value="2">2 người</Option>
@@ -1382,7 +1597,11 @@ const DeclarationForm = () => {
                                             label={<span className="text-sm">Số tháng đóng</span>}
                                             rules={[{ required: true, message: 'Vui lòng chọn số tháng đóng' }]}
                                         >
-                                            <Select placeholder="Chọn số tháng đóng" className="h-9">
+                                            <Select 
+                                                placeholder="Chọn số tháng đóng" 
+                                                className="h-9"
+                                                onChange={handleMonthsChange}
+                                            >
                                                 <Option value="3">3 tháng</Option>
                                                 <Option value="6">6 tháng</Option>
                                                 <Option value="12">12 tháng</Option>
@@ -1410,11 +1629,15 @@ const DeclarationForm = () => {
                                             name="receipt_number"
                                             label={<span className="text-sm">Số biên lai</span>}
                                             rules={[
-                                                { required: true, message: 'Vui lòng nhập số biên lai' },
                                                 { pattern: /^\d{7}$/, message: 'Số biên lai phải có 7 chữ số' }
                                             ]}
                                         >
-                                            <Input maxLength={7} placeholder="Nhập số biên lai" className="h-9" />
+                                            <Input 
+                                                maxLength={7}
+                                                placeholder="Nhập số biên lai" 
+                                                className="h-9"
+                                                allowClear
+                                            />
                                         </Form.Item>
                                     </Col>
                                     <Col span={8}>
@@ -1581,7 +1804,7 @@ const DeclarationForm = () => {
                             <div className="flex justify-between items-center">
                                 <div>
                                     <h3 className="text-base font-medium text-gray-800">
-                                        Danh sách k�� khai trong đợt
+                                        Danh sách kê khai trong đợt
                                     </h3>
                                     <span className="text-sm text-gray-500">
                                         {declarations?.length || 0} bản ghi
@@ -1599,98 +1822,7 @@ const DeclarationForm = () => {
                         </div>
                         
                         <div className="p-4">
-                            {declarations?.length > 0 ? (
-                                <>
-                                    <div className="space-y-3">
-                                        {getCurrentPageData().map(record => (
-                                            <div 
-                                                key={record.id}
-                                                className="p-3 border border-gray-200 rounded-md hover:bg-gray-50 cursor-pointer"
-                                                onClick={() => handleRowClick(record)}
-                                            >
-                                                <div className="flex justify-between items-start mb-2">
-                                                    <div>
-                                                        <div className="font-medium text-gray-900">{record.full_name}</div>
-                                                        <div className="text-sm text-gray-600">Mã BHXH: {record.bhxh_code}</div>
-                                                        <div className="text-sm text-gray-600">CCCD: {record.cccd}</div>
-                                                    </div>
-                                                    <div className="flex space-x-1">
-                                                        <Button
-                                                            type="text"
-                                                            size="middle"
-                                                            className="text-blue-600 hover:text-blue-800"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                handleEdit(record);
-                                                            }}
-                                                        >
-                                                            Sửa
-                                                        </Button>
-                                                        <Popconfirm
-                                                            title="Xóa kê khai"
-                                                            description="Bạn có chắc chắn muốn xóa kê khai này?"
-                                                            onConfirm={(e) => {
-                                                                e.stopPropagation();
-                                                                handleDelete(record);
-                                                            }}
-                                                            okText="Xóa"
-                                                            cancelText="Hủy"
-                                                        >
-                                                            <Button
-                                                                type="text"
-                                                                size="middle"
-                                                                danger
-                                                                onClick={(e) => e.stopPropagation()}
-                                                            >
-                                                                Xóa
-                                                            </Button>
-                                                        </Popconfirm>
-                                                    </div>
-                                                </div>
-                                                <div className="text-xs text-gray-500">
-                                                    Ngày biên lai: {dayjs(record.receipt_date).format('DD/MM/YYYY')}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-
-                                    {/* Phân trang */}
-                                    {totalPages > 1 && (
-                                        <div className="mt-4 flex justify-center">
-                                            <div className="flex space-x-1">
-                                                <Button
-                                                    type="default"
-                                                    size="small"
-                                                    disabled={currentPage === 1}
-                                                    onClick={() => handlePageChange(currentPage - 1)}
-                                                    icon={<LeftOutlined />}
-                                                />
-                                                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                                                    <Button
-                                                        key={page}
-                                                        type={currentPage === page ? "primary" : "default"}
-                                                        size="small"
-                                                        onClick={() => handlePageChange(page)}
-                                                    >
-                                                        {page}
-                                                    </Button>
-                                                ))}
-                                                <Button
-                                                    type="default"
-                                                    size="small"
-                                                    disabled={currentPage === totalPages}
-                                                    onClick={() => handlePageChange(currentPage + 1)}
-                                                    icon={<RightOutlined />}
-                                                />
-                                            </div>
-                                        </div>
-                                    )}
-                                </>
-                            ) : (
-                                <div className="text-center text-gray-500 py-8">
-                                    Chưa có kê khai nào trong đợt
-                                </div>
-                            )}
+                            {renderDeclarationsList()}
                         </div>
                     </div>
                 </div>

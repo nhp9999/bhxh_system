@@ -5,13 +5,21 @@ const path = require('path');
 
 // Get employee batches
 const getEmployeeBatches = async (req, res) => {
+    const client = await pool.connect();
     try {
         const user = req.user;
-        const batches = await pool.query(
-            `SELECT * FROM declaration_batch 
-            WHERE created_by = $1 
-            AND deleted_at IS NULL
-            ORDER BY created_at DESC`,
+        
+        // Lấy danh sách batches
+        const batches = await client.query(
+            `SELECT 
+                db.*,
+                COALESCE(json_agg(d.*) FILTER (WHERE d.id IS NOT NULL), '[]') as declarations
+            FROM declaration_batch db
+            LEFT JOIN declarations d ON db.id = d.batch_id AND d.deleted_at IS NULL
+            WHERE db.created_by = $1 
+            AND db.deleted_at IS NULL
+            GROUP BY db.id
+            ORDER BY db.created_at DESC`,
             [user.id]
         );
 
@@ -22,6 +30,8 @@ const getEmployeeBatches = async (req, res) => {
             success: false,
             message: 'Có lỗi xảy ra khi lấy danh sách đợt kê khai'
         });
+    } finally {
+        client.release();
     }
 };
 
@@ -231,7 +241,7 @@ const updateBatch = async (req, res) => {
         let newName = name;
 
         if (duplicateCheck.rows.length > 0) {
-            // Lấy số đợt cao nhất trong tháng
+            // Lấy số đợt cao nhất trong th��ng
             const maxBatchResult = await client.query(
                 `SELECT MAX(batch_number) as max_batch 
                 FROM declaration_batch 
@@ -375,7 +385,7 @@ const createDeclaration = async (req, res) => {
         const user = req.user;
 
         // Validate dữ liệu đầu vào
-        if (!batch_id || !bhxh_code || !full_name || !cccd || !phone_number || 
+        if (!batch_id || !bhxh_code || !full_name || !cccd || 
             !receipt_date || !months || !plan || !commune || !participant_number) {
             throw new Error('Vui lòng điền đầy đủ thông tin bắt buộc');
         }
@@ -389,7 +399,7 @@ const createDeclaration = async (req, res) => {
             throw new Error('CCCD phải có 12 chữ số');
         }
 
-        if (!/^\d{10}$/.test(phone_number)) {
+        if (phone_number && !/^\d{10}$/.test(phone_number)) {
             throw new Error('Số điện thoại phải có 10 chữ số');
         }
 
@@ -828,7 +838,7 @@ const submitBatch = async (req, res) => {
         if (batch.status !== 'pending') {
             return res.status(400).json({ 
                 success: false,
-                message: 'ợt kê khai không ở trạng thái ch��� gửi' 
+                message: 'ợt kê khai không ở trạng thái chờ gửi' 
             });
         }
 
@@ -1105,21 +1115,21 @@ const confirmBatchPayment = async (req, res) => {
     const client = await pool.connect();
     try {
         const { id } = req.params;
-        const user = req.user;
+        const userId = req.user.id;
 
-        await client.query('BEGIN');
-
-        // Kiểm tra batch có tồn tại không và lấy thông tin
+        // Kiểm tra quyền truy cập batch
         const batchCheck = await client.query(
-            'SELECT * FROM declaration_batch WHERE id = $1 FOR UPDATE',
-            [id]
+            `SELECT * FROM declaration_batch 
+             WHERE id = $1 
+             AND created_by = $2
+             AND deleted_at IS NULL`,
+            [id, userId]
         );
 
         if (batchCheck.rows.length === 0) {
-            await client.query('ROLLBACK');
             return res.status(404).json({
                 success: false,
-                message: 'Không tìm thấy đợt kê khai'
+                message: 'Không tìm thấy đợt kê khai hoặc bạn không có quyền truy cập'
             });
         }
 
@@ -1127,40 +1137,31 @@ const confirmBatchPayment = async (req, res) => {
 
         // Kiểm tra trạng thái hiện tại
         if (batch.payment_status === 'paid') {
-            await client.query('ROLLBACK');
             return res.status(400).json({
                 success: false,
-                message: 'Đợt kê khai này đã được thanh toán'
+                message: 'Đợt kê khai đã được thanh toán'
             });
         }
 
         // Cập nhật trạng thái đã thanh toán
-        const result = await client.query(
+        await client.query(
             `UPDATE declaration_batch 
-            SET payment_status = $1::text,
-                payment_date = CURRENT_TIMESTAMP,
-                updated_at = CURRENT_TIMESTAMP,
-                updated_by = $2
-            WHERE id = $3
-            RETURNING *`,
-            ['paid', user.id, id]
+             SET payment_status = 'paid',
+                 payment_date = CURRENT_TIMESTAMP,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = $1`,
+            [id]
         );
-
-        await client.query('COMMIT');
 
         res.json({
             success: true,
-            message: 'Xác nhận thanh toán thành công',
-            data: result.rows[0]
+            message: 'Xác nhận thanh toán thành công'
         });
-
     } catch (error) {
-        await client.query('ROLLBACK');
-        console.error('Confirm payment error:', error);
+        console.error('Error confirming batch payment:', error);
         res.status(500).json({
             success: false,
-            message: 'Có lỗi xảy ra khi xác nhận thanh toán',
-            error: error.message
+            message: 'Có lỗi xảy ra khi xác nhận thanh toán'
         });
     } finally {
         client.release();
@@ -1651,6 +1652,71 @@ const getBHXHHistory = async (req, res) => {
     }
 };
 
+// Cập nhật mã hồ sơ cho đợt kê khai
+const updateBatchFileCode = async (req, res) => {
+    const client = await pool.connect();
+    try {
+        const { id } = req.params;
+        const { file_code } = req.body;
+
+        // Kiểm tra file_code có được gửi lên không
+        if (!file_code || !file_code.trim()) {
+            return res.status(400).json({
+                success: false,
+                message: 'Vui lòng nhập mã hồ sơ'
+            });
+        }
+
+        // Kiểm tra đợt kê khai có tồn tại không
+        const batchCheck = await client.query(
+            `SELECT * FROM declaration_batch 
+             WHERE id = $1 
+             AND deleted_at IS NULL`,
+            [id]
+        );
+
+        if (batchCheck.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Không tìm thấy đợt kê khai'
+            });
+        }
+
+        const batch = batchCheck.rows[0];
+
+        // Kiểm tra trạng thái
+        if (batch.status !== 'approved' || batch.payment_status !== 'paid') {
+            return res.status(400).json({
+                success: false,
+                message: 'Chỉ có thể cập nhật mã hồ sơ cho đợt đã duyệt và đã thanh toán'
+            });
+        }
+
+        // Cập nhật mã hồ sơ
+        await client.query(
+            `UPDATE declaration_batch 
+             SET file_code = $1,
+                 updated_at = CURRENT_TIMESTAMP,
+                 updated_by = $2
+             WHERE id = $3`,
+            [file_code.trim(), req.user.id, id]
+        );
+
+        res.json({
+            success: true,
+            message: 'Cập nhật mã hồ sơ thành công'
+        });
+    } catch (error) {
+        console.error('Error updating batch file code:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Có lỗi xảy ra khi cập nhật mã hồ sơ'
+        });
+    } finally {
+        client.release();
+    }
+};
+
 module.exports = {
     getEmployeeBatches,
     getBatchById,
@@ -1672,5 +1738,6 @@ module.exports = {
     exportBatchToExcel,
     softDeleteDeclaration,
     getEmployeeDeclarations,
-    getBHXHHistory
+    getBHXHHistory,
+    updateBatchFileCode,
 };

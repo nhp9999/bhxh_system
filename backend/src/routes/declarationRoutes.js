@@ -5,6 +5,7 @@ const { authenticateToken } = require('../middleware/auth');
 const pool = require('../config/database');
 const XlsxPopulate = require('xlsx-populate');
 const path = require('path');
+const fs = require('fs');
 
 // Route xác nhận thanh toán
 router.post('/batch/:id/confirm-payment', authenticateToken, declarationController.confirmBatchPayment);
@@ -24,7 +25,7 @@ router.get('/declarations/admin/batch/:id', authenticateToken, async (req, res) 
     try {
         const { id } = req.params;
         
-        // Lấy th��ng tin batch
+        // Lấy thông tin batch
         const batchResult = await client.query(`
             SELECT 
                 db.*,
@@ -197,6 +198,133 @@ router.get('/declarations/admin/batch/:id/export', authenticateToken, async (req
     } finally {
         await client.release();
     }
+});
+
+// Employee routes
+router.get('/employee/list', authenticateToken, declarationController.getEmployeeDeclarations);
+router.post('/employee/create', authenticateToken, declarationController.createDeclaration);
+router.get('/employee/batches', authenticateToken, declarationController.getEmployeeBatches);
+router.post('/employee/batch/:id/confirm-payment', authenticateToken, declarationController.confirmBatchPayment);
+
+// Upload bill route
+router.post('/employee/batch/:id/upload-bill', authenticateToken, async (req, res) => {
+    console.log('Upload bill request:', {
+        params: req.params,
+        files: req.files,
+        user: req.user
+    });
+
+    const client = await pool.connect();
+    try {
+        const { id } = req.params;
+        const userId = req.user.id;
+        
+        if (!req.files || !req.files.bill_image) {
+            return res.status(400).json({
+                success: false,
+                message: 'Không tìm thấy file ảnh'
+            });
+        }
+
+        // Kiểm tra quyền upload
+        const batch = await client.query(
+            'SELECT * FROM declaration_batch WHERE id = $1 AND created_by = $2',
+            [id, userId]
+        );
+
+        if (batch.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Không tìm thấy đợt kê khai'
+            });
+        }
+
+        const billImage = req.files.bill_image;
+        const fileExtension = billImage.name.split('.').pop();
+        const fileName = `bill_${id}_${Date.now()}.${fileExtension}`;
+        const uploadDir = path.join(__dirname, '../../uploads/bills');
+        const uploadPath = path.join(uploadDir, fileName);
+
+        console.log('Upload path:', {
+            uploadDir,
+            uploadPath,
+            fileName
+        });
+
+        // Tạo thư mục nếu chưa tồn tại
+        if (!fs.existsSync(uploadDir)) {
+            console.log('Creating upload directory:', uploadDir);
+            fs.mkdirSync(uploadDir, { recursive: true });
+        }
+
+        // Upload file
+        await billImage.mv(uploadPath);
+
+        // Cập nhật đường dẫn ảnh trong database
+        await client.query(
+            'UPDATE declaration_batch SET bill_image = $1 WHERE id = $2',
+            [fileName, id]
+        );
+
+        await client.query('COMMIT');
+
+        res.json({
+            success: true,
+            message: 'Upload ảnh bill thành công',
+            data: { fileName }
+        });
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Error uploading bill image:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Không thể upload ảnh bill: ' + error.message
+        });
+    } finally {
+        client.release();
+    }
+});
+
+// Route phục vụ file tĩnh
+router.get('/uploads/bills/:filename', (req, res) => {
+    const filename = req.params.filename;
+    const filePath = path.join(__dirname, '../../uploads/bills', filename);
+    
+    console.log('Serving bill image:', {
+        filename,
+        filePath,
+        exists: fs.existsSync(filePath),
+        url: req.url,
+        fullUrl: req.protocol + '://' + req.get('host') + req.originalUrl
+    });
+    
+    if (!fs.existsSync(filePath)) {
+        console.log('File not found:', filePath);
+        return res.status(404).json({
+            status: 'error',
+            message: 'Không tìm thấy file ảnh'
+        });
+    }
+    
+    // Set content type header based on file extension
+    const ext = path.extname(filename).toLowerCase();
+    const contentType = ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 
+                       ext === '.png' ? 'image/png' : 
+                       'application/octet-stream';
+    
+    res.setHeader('Content-Type', contentType);
+    
+    // Stream the file
+    const stream = fs.createReadStream(filePath);
+    stream.on('error', (error) => {
+        console.error('Error streaming file:', error);
+        res.status(500).json({
+            status: 'error',
+            message: 'Không thể đọc file ảnh'
+        });
+    });
+    
+    stream.pipe(res);
 });
 
 module.exports = router; 
